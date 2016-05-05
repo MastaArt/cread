@@ -768,6 +768,7 @@ rollout _STEP5 "STEP 5: Create Archive"
 	timer tmrExport "" interval: 1000 active: false	
 	
 	global iCountExport = 1
+	global goodTex = #()
 	
 	fn getCSV f sel:selection =
 	(
@@ -829,72 +830,112 @@ rollout _STEP5 "STEP 5: Create Archive"
 		
 		return mapPaths.getFullFilePath (filenameFromPath  p)
 	)
-		
-	fn gatherTextures szMaps type: Bitmaptexture = 
+	-- Fixed !!
+	fn invalidBitmap b = 
+	(	
+		return b == undefined or b.filename == undefined or b.filename == "" or b.filename.count == 0
+	)
+	
+	fn validBitmap b = 
+	(	
+		return b != undefined and b.filename != undefined and b.filename != "" and b.filename.count != 0
+	)
+	
+	fn checkTexturesError type: Bitmaptexture =
 	(
-		oldMtl = #()
-		oldTex = #()
-		oldTexPaths = #()
 		errorTex = #()
-		toRename = #()
-		iCnt = 1
-		iCnt2 = 1
-		
-		try
-		(		
-			for i in selection where i.material != undefined and findItem oldMtl i.material == 0 do
-			(			
-				if(bSetMaterialNames and findString (i.material.name) szModelName == undefined) do 
-				(
-					i.material.name = szModelName + "_" + (getNum iCnt)
-					
-					if(classOf i.material == Multimaterial) do for ii in 1 to i.material.count where i.material[ii] != undefined do i.material[ii].name = i.material.name + "_" + (getNum ii)
+		oldTex = #()
+				
+		for i in selection where i.material != undefined do
+		(
+			for b in getClassInstances type target:i where b != undefined do
+			(				
+				if(invalidBitmap b and findItem oldTex b == 0) then
+				(										
+					append errorTex #("empty file name path! Map: " + b.name, i.name) 
+					append oldTex b
 				)
+				else if (validBitmap b and doesFileExist (f = getFullPath (b.filename)) == false) then
+				(
+					append errorTex #(b.filename, i.name) 
+				)
+				else
+				(
+					append goodTex #(b, f)
+				)
+			)
+		)
+		
+		return errorTex
+	)
+	
+	fn renameMaterials =
+	(
+		if(not bSetMaterialNames) do return false
+		
+		oldMtl = #()
+		iCnt = 1
+			
+		for i in selection where i.material != undefined and findItem oldMtl i.material == 0 do
+		(			
+			if(findString (i.material.name) szModelName == undefined) do 
+			(
+				i.material.name = szModelName + "_" + (getNum iCnt)
+				
+				if(classOf i.material == Multimaterial) do for ii in 1 to i.material.count where i.material[ii] != undefined do i.material[ii].name = i.material.name + "_" + (getNum ii)
 				
 				append oldMtl i.material
-								
-				for b in getClassInstances type target:i do
-				(				
-					f = getFullPath b.filename
-					
-					n = filenameFromPath f
-					p = getFilenamePath f
-										
-					if(bTexturesRename and findItem oldTex b == 0) do 
-					(
-						n = szModelName + "_" + (getNum iCnt2) + (getFilenameType f)
-						append oldTex b
-												
-						if(doesFileExist f) then
-						(
-							ep = findItem oldTexPaths b.filename
-							
-							if(ep != 0) then n = toRename[ep][4]
-							
-							append toRename #(b, (p + n), (szMaps + n), n, f) 
-						
-							if(ep == 0) do iCnt2 += 1
-							append oldTexPaths b.filename
-						)	
-						else append errorTex #(b.filename, i.name)								
-					)					
-				)
 				
 				iCnt += 1
-			)
-		)catch()
+			)						
+		)
+	)
+	
+	fn gatherTextures szMaps goodTex type: Bitmaptexture = 
+	(
+		oldTex = #()
+		oldTexPaths = #()
+		toRename = #()
+		iCnt = 1
 		
-		if(errorTex.count > 0) do return errorTex
+		if(bTexturesRename) do
+		(
+			for b in goodTex where findItem oldTex b[1] == 0 do
+			(																			
+				f = b[2]
+			
+				n = filenameFromPath f
+				p = getFilenamePath f
+				ext = getFilenameType f
+				
+				n = szModelName + "_" + (getNum iCnt) + ext
+				append oldTex b[1]
+								
+				if(doesFileExist f) do
+				( 
+					ep = findItem oldTexPaths b[2]
+					
+					if(ep != 0) then n = toRename[ep][4]
+					print f
+					append toRename #(b[1], (p + n), (szMaps + n), n, f) 
+				
+					if(ep == 0) do iCnt += 1
+					append oldTexPaths b[2]
+				)												
+			)
+		)
 		
 		for t in toRename do
 		(
 			copyFile t[5] t[3]
 			
-			t[1].filename = t[2]
-			if(bTexturesStrip) do t[1].filename = szMaps + t[4]
+			t[1].filename = t[2]		
 		)
-
-		return errorTex
+		
+		if(bTexturesStrip) do 
+		(
+			for b in getClassInstances type where (validBitmap b) do b.filename = szMaps + (filenameFromPath b.filename)
+		)	
 	)
 	
 	
@@ -981,41 +1022,29 @@ rollout _STEP5 "STEP 5: Create Archive"
 		makeDir szPreview	
 		if(bAddMatLib == true) do makeDir szMtl	
 		makeDir szModels	
-			
 		
-		-- Rename Models			
-		if(iKeepModelName == 2) do (for i in selection do i.name = uniqueName (szModelName + "_"))
+	
+		-- Check missing textures
 		
-		-- Layer
-		if(bLayer0) do
-		(
-			layer0 = LayerManager.getLayer 0
-			for i in selection do layer0.addNode i
-		)
-			
-		-- Materials
-		
+		goodTex = #()
 		errorTex = #()
 		
-		t1 = gatherTextures szMaps
-		t2 = gatherTextures szMaps type: CoronaBitmap
-		
+		t1 = checkTexturesError()
+		t2 = checkTexturesError type: CoronaBitmap
+				
 		join errorTex t1
 		join errorTex t2
 		
 		if (errorTex.count > 0) do
 		(
-			t = localTime
-			m = "[" + t + "] : Error! Not found next textures. Please fix model and try again.\n\n"
+			m = "[" + localTime + "] : Error! Not found next textures. Please fix model and try again.\n\n"
 			
 			for er in errorTex do m += "Object: " + er[2] + "\nTexture: " + er[1] + "\n\n"
 			
 			showStatistic m title:"Log" width:500
 			return false
 		)
-	
-		if(bAddMatLib == true) do saveMtlLib szMatLib
-		
+				
 		-- Preview
 		iPreview = 0
 		for i in szPreviewPath do
@@ -1027,20 +1056,43 @@ rollout _STEP5 "STEP 5: Create Archive"
 				copyFile i (szPreview + "picture" + iPreview as string + p)
 			)
 		)
-		
-		
+				
 		currentRender = renderers.current
 			
 		-- Add Versions
 		saveNodes selection szScene saveAsVersion:(v as integer) quiet:true
 		resetMaxFile #noPrompt
 		mergeMAXFile szScene #select #mergedups #renameMtlDups #noRedraw quiet:true
-		-- Fix selection in 3Ds Max 2016		
-		saveNodes objects szScene saveAsVersion:(v as integer) quiet:true
-				
+						
 		try(renderers.current = currentRender)catch()
 		
 		select objects
+		-- Fixed !! Added after reload scene Layers and Object renamer
+		-- Rename Models			
+		if(iKeepModelName == 2) do (for i in objects do i.name = uniqueName (szModelName + "_"))
+		
+		-- Layer
+		if(bLayer0) do
+		(
+			layer0 = LayerManager.getLayer 0
+			for i in objects do layer0.addNode i
+		)
+		
+		-- Materials
+		
+		goodTex = makeUniqueArray goodTex
+		
+		gatherTextures szMaps goodTex
+		
+		-- Rename Materials
+		renameMaterials()
+
+		-- Fix selection in 3Ds Max 2016		
+		saveNodes objects szScene saveAsVersion:(v as integer) quiet:true
+
+		-- Mat Lib
+		
+		if(bAddMatLib == true) do saveMtlLib szMatLib
 			
 		-- CSV
 		
