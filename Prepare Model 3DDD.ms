@@ -938,6 +938,7 @@ rollout _STEP5 "STEP 5: Create Archive"
 		)
 	)
 	
+	fn stripTextures szMaps =
 	(
 		if(not bTexturesStrip) do return false
 		
@@ -1092,6 +1093,7 @@ rollout _STEP5 "STEP 5: Create Archive"
 		
 		gatherTextures szMaps goodTex
 		
+		stripTextures szMaps
 		
 		-- Rename Materials
 		renameMaterials()
