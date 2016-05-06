@@ -37,6 +37,8 @@ global szWinRarPath = @"C:\Program Files\WinRAR\WinRAR.exe"
 global szWinRarPath2 = @"C:\Program Files (x86)\WinRAR\WinRAR.exe"
 global szGoodChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz \\;:1234567890!@#$%^&*()_+~'.,[]{}" 
 
+global BitmapTypes = #(Bitmaptexture, CoronaBitmap)
+
 global iWindowPos = [0.0, 0.0]
 
 -- Fixed !
@@ -891,53 +893,59 @@ rollout _STEP5 "STEP 5: Create Archive"
 		)
 	)
 	
-	fn gatherTextures szMaps goodTex type: Bitmaptexture = 
+	fn gatherTextures szMaps goodTex = 
 	(
-		oldTex = #()
-		oldTexPaths = #()
-		toRename = #()
-		iCnt = 1
-		
-		if(bTexturesRename) do
+		for type in BitmapTypes do
 		(
-			for b in goodTex where findItem oldTex b[1] == 0 do
-			(																			
-				f = b[2]
+			oldTex = #()
+			oldTexPaths = #()
+			toRename = #()
+			iCnt = 1
 			
-				n = filenameFromPath f
-				p = getFilenamePath f
-				ext = getFilenameType f
+			if(bTexturesRename) do
+			(
+				for b in goodTex where findItem oldTex b[1] == 0 do
+				(																			
+					f = b[2]
 				
-				n = szModelName + "_" + (getNum iCnt) + ext
-				append oldTex b[1]
-								
-				if(doesFileExist f) do
-				( 
-					ep = findItem oldTexPaths b[2]
+					n = filenameFromPath f
+					p = getFilenamePath f
+					ext = getFilenameType f
 					
-					if(ep != 0) then n = toRename[ep][4]
-					print f
-					append toRename #(b[1], (p + n), (szMaps + n), n, f) 
+					n = szModelName + "_" + (getNum iCnt) + ext
+					append oldTex b[1]
+									
+					if(doesFileExist f) do
+					( 
+						ep = findItem oldTexPaths b[2]
+						
+						if(ep != 0) then n = toRename[ep][4]
+						print f
+						append toRename #(b[1], (p + n), (szMaps + n), n, f) 
+					
+						if(ep == 0) do iCnt += 1
+						append oldTexPaths b[2]
+					)												
+				)
+			)
+			
+			for t in toRename do
+			(
+				copyFile t[5] t[3]
 				
-					if(ep == 0) do iCnt += 1
-					append oldTexPaths b[2]
-				)												
+				t[1].filename = t[2]		
 			)
 		)
-		
-		for t in toRename do
-		(
-			copyFile t[5] t[3]
-			
-			t[1].filename = t[2]		
-		)
-		
-		if(bTexturesStrip) do 
-		(
-			for b in getClassInstances type where (validBitmap b) do b.filename = szMaps + (filenameFromPath b.filename)
-		)	
 	)
 	
+	(
+		if(not bTexturesStrip) do return false
+		
+		for type in BitmapTypes do
+		(
+			for b in getClassInstances type where (validBitmap b) do b.filename = szMaps + (filenameFromPath b.filename)
+		)		
+	)
 	
 	on btnPrev pressed do sliderStep 4 true	
 	
@@ -1083,6 +1091,7 @@ rollout _STEP5 "STEP 5: Create Archive"
 		goodTex = makeUniqueArray goodTex
 		
 		gatherTextures szMaps goodTex
+		
 		
 		-- Rename Materials
 		renameMaterials()
